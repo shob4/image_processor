@@ -8,13 +8,6 @@ pub struct Rgb {
     pub blue: u8,
 }
 
-struct BmpFileHeader {
-    signature: u16,
-    size: u32,
-    reserve: u32,
-    start: u32,
-}
-
 struct BitMapImageHeader {
     size: u32,
     width: i32,
@@ -43,24 +36,18 @@ enum BmpCompressionMethods {
 }
 
 pub struct BmpImage {
-    header: BmpFileHeader,
     dib_header: BitMapImageHeader,
     pixels: Vec<Vec<Rgb>>,
 }
 
 impl BmpImage {
-    fn new(
-        header: BmpFileHeader,
-        dib_header: BitMapImageHeader,
-        file: &str,
-    ) -> Result<BmpImage, ImageError> {
+    pub fn new(dib_header: BitMapImageHeader, file: &str) -> Result<BmpImage, ImageError> {
         let mut buffer = Vec::new();
         let file = File::open(file)?;
         file.read(&mut buffer)?;
-        let image = &buffer[37..];
+        let image = &buffer[dib_header.size as usize..];
         let pixels = image;
         Ok(BmpImage {
-            header: header,
             dib_header: dib_header,
             pixels: pixels,
         })

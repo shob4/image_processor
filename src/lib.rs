@@ -13,15 +13,24 @@ pub fn read_image(image: &str) -> Result<(), ImageError> {
         return Err(ImageError::CustomError("file too small".to_string()));
     }
     let buf = &buffer[..bytes_read];
-    let kind = infer::get(&buf).expect("file type is known");
-    match kind.map(|t| t.mime_type()) {
-        Some("image/png") => todo!("create png type"),
-        Some("image/jpeg") => todo!("create jpeg type"),
-        Some("image/bmp") => todo!("create bmp type"),
-        Some(other) => Err(ImageError::CustomError("unsupported file type".to_string())),
+    match infer::get(&buf).map(|t| t.mime_type()) {
+        Some("image/png") => Ok(()),
+        Some("image/jpeg") => Ok(()),
+        Some("image/bmg") => {
+            let mut buffer = Vec::new();
+            let bytes_read = file.read(&mut buffer)?;
+            if bytes_read < 54 {
+                return Err(ImageError::CustomError("no image".to_string()));
+            }
+            let image = bmp::BmpImage::new();
+            Ok(())
+        }
+        Some(other) => Err(ImageError::CustomError(format!(
+            "unsupported file type: {0}",
+            other
+        ))),
         None => Err(ImageError::CustomError("unsupported file type".to_string())),
     }
-    Ok(())
 }
 
 #[cfg(test)]
