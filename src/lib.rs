@@ -3,7 +3,7 @@ mod error;
 
 use crate::error::ImageError;
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, Seek, SeekFrom};
 
 pub fn read_image(image: &str) -> Result<(), ImageError> {
     let mut file = File::open(image)?;
@@ -18,11 +18,11 @@ pub fn read_image(image: &str) -> Result<(), ImageError> {
         Some("image/jpeg") => Ok(()),
         Some("image/bmg") => {
             let mut buffer = Vec::new();
-            let bytes_read = file.read(&mut buffer)?;
-            if bytes_read < 54 {
-                return Err(ImageError::CustomError("no image".to_string()));
-            }
-            let image = bmp::BmpImage::new();
+            file.seek(SeekFrom::Start(14));
+            file.read_exact(&mut buffer)?;
+            let header_bytes = &buffer[..40];
+            let header = bmp::BitMapImageHeader::new(header_bytes);
+            let image = bmp::BmpImage::new(header, file);
             Ok(())
         }
         Some(other) => Err(ImageError::CustomError(format!(

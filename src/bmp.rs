@@ -8,7 +8,7 @@ pub struct Rgb {
     pub blue: u8,
 }
 
-struct BitMapImageHeader {
+pub struct BitMapImageHeader {
     size: u32,
     width: i32,
     height: i32,
@@ -20,6 +20,24 @@ struct BitMapImageHeader {
     vertical_resolution: u32,
     color_count: u32,
     important_color_count: u32,
+}
+
+impl BitMapImageHeader {
+    pub fn new(header_bytes: &[u8]) -> BitMapImageHeader {
+        BitMapImageHeader {
+            size: header_bytes[..4],
+            width: header_bytes[4..8],
+            height: header_bytes[8..12],
+            number_of_color_planes: header_bytes[12..14],
+            bits_per_pixel: header_bytes[14..16],
+            compression_method_raw: header_bytes[16..20],
+            image_size: header_bytes[20..24],
+            horizontal_resolution: header_bytes[24..28],
+            vertical_resolution: header_bytes[28..32],
+            color_count: header_bytes[32..36],
+            important_color_count: header_bytes[36..40],
+        }
+    }
 }
 
 enum BmpCompressionMethods {
