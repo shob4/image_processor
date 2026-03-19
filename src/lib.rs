@@ -18,10 +18,10 @@ pub fn read_image(image: &str) -> Result<(), ImageError> {
         Some("image/jpeg") => Ok(()),
         Some("image/bmg") => {
             let mut buffer = Vec::new();
-            file.seek(SeekFrom::Start(14));
+            file.seek(SeekFrom::Start(14))?;
             file.read_exact(&mut buffer)?;
             let header_bytes = &buffer[..40];
-            let header = bmp::BitMapImageHeader::new(header_bytes);
+            let header = bmp::BitMapImageHeader::new(header_bytes)?;
             let image = bmp::BmpImage::new(header, file);
             Ok(())
         }
