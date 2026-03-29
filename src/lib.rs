@@ -1,5 +1,6 @@
 mod bmp;
 mod error;
+mod rle;
 
 use crate::error::ImageError;
 use std::fs::File;
