@@ -64,25 +64,155 @@ impl BmpImage {
         file.read(&mut buffer)?;
         let image = &buffer[dib_header.size as usize..];
         let num_colors = if dib_header.color_count == 0 {
-            1 << dib_header.bits_per_pixel
+            let base: usize = 2;
+            base.pow(dib_header.bits_per_pixel as u32)
         } else {
             dib_header.color_count as usize
         };
-        let mut palette = Vec::new();
-        for i in 0..num_colors {
-            let b = image[i * 4];
-            let g = image[i * 4 + 1];
-            let r = image[i * 4 + 2];
-            let color = Rgb {
-                red: r,
-                green: g,
-                blue: b,
+
+        if dib_header.bits_per_pixel < 24 {
+            let mut palette = Vec::new();
+            for i in 0..num_colors {
+                let b = image[i * 4];
+                let g = image[i * 4 + 1];
+                let r = image[i * 4 + 2];
+                let color = Rgb {
+                    red: r,
+                    green: g,
+                    blue: b,
+                };
+                palette.push(color)
+            }
+            let palette_offset = num_colors * 4;
+            let pixels = match choose_decoding_method(
+                dib_header.compression_method_raw,
+                &image[palette_offset..],
+                dib_header.bits_per_pixel,
+                Some(palette),
+            ) {
+                Ok(pixel_array) => pixel_array,
+                Err(e) => return Err(e),
             };
-            palette.push(color)
+            return Ok(BmpImage {
+                dib_header: dib_header,
+                pixels: pixels,
+            });
         }
+
+        let pixels = match choose_decoding_method(
+            dib_header.compression_method_raw,
+            image,
+            dib_header.bits_per_pixel,
+            None,
+        ) {
+            Ok(pixel_array) => pixel_array,
+            Err(e) => return Err(e),
+        };
+
         Ok(BmpImage {
             dib_header: dib_header,
-            pixels: palette,
+            pixels: pixels,
         })
     }
+}
+
+fn choose_decoding_method(
+    method: u32,
+    image: &[u8],
+    bits_per_pixel: u16,
+    palette: Option<Vec<Rgb>>,
+) -> Result<Vec<Rgb>, ImageError> {
+    // TODO not sure the encoded pixels need a palette to be decoded
+    match method {
+        0 => read_unencoded_pixels(image, bits_per_pixel),
+        1 => {
+            let palette = match palette {
+                Some(colors) => colors,
+                None => {
+                    return Err(ImageError::CustomError(
+                        "no palette to decode RLE encoded bmp with".to_string(),
+                    ));
+                }
+            };
+            decode_RLE8(image, bits_per_pixel, palette)
+        }
+        2 => {
+            let palette = match palette {
+                Some(colors) => colors,
+                None => {
+                    return Err(ImageError::CustomError(
+                        "no palette to decode RLE encoded bmp with".to_string(),
+                    ));
+                }
+            };
+            decode_RLE4(image, bits_per_pixel, palette)
+        }
+        12 => {
+            let palette = match palette {
+                Some(colors) => colors,
+                None => {
+                    return Err(ImageError::CustomError(
+                        "no palette to decode RLE encoded bmp with".to_string(),
+                    ));
+                }
+            };
+            decode_RLE8(image, bits_per_pixel, palette)
+        }
+        13 => {
+            let palette = match palette {
+                Some(colors) => colors,
+                None => {
+                    return Err(ImageError::CustomError(
+                        "no palette to decode RLE encoded bmp with".to_string(),
+                    ));
+                }
+            };
+            decode_RLE4(image, bits_per_pixel, palette)
+        }
+        _ => panic!("dib_header read an invalid compression method"),
+    }
+}
+
+fn decode_RLE8(
+    image: &[u8],
+    bits_per_pixel: u16,
+    palette: Vec<Rgb>,
+) -> Result<Vec<Rgb>, ImageError> {
+    let decoded_image: Vec<Rgb> = Vec::new();
+    Ok(decoded_image)
+}
+
+fn decode_RLE4(
+    image: &[u8],
+    bits_per_pixel: u16,
+    palette: Vec<Rgb>,
+) -> Result<Vec<Rgb>, ImageError> {
+    let decoded_image: Vec<Rgb> = Vec::new();
+    Ok(decoded_image)
+}
+
+fn decode_RLE24(
+    image: &[u8],
+    bits_per_pixel: u16,
+    palette: Vec<Rgb>,
+) -> Result<Vec<Rgb>, ImageError> {
+    let decoded_image: Vec<Rgb> = Vec::new();
+    Ok(decoded_image)
+}
+
+fn read_unencoded_pixels(image: &[u8], bits_per_pixel: u16) -> Result<Vec<Rgb>, ImageError> {
+    let pixel_size = bits_per_pixel as usize;
+    let mut decoded_image: Vec<Rgb> = Vec::new();
+    // this stuff is confusing
+    for i in (0..(image.len() / pixel_size)).rev() {
+        let blue = image[i * pixel_size..i * pixel_size + pixel_size];
+        let green = image[i * pixel_size + pixel_size + 1..i * pixel_size + 2 * pixel_size];
+        let red = image[i * pixel_size + 2 * pixel_size + 1];
+        decoded_image.push(Rgb {
+            red: red,
+            green: green,
+            blue: blue,
+        });
+    }
+    Ok(decoded_image)
 }
