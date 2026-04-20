@@ -1,5 +1,6 @@
 mod bmp;
 mod error;
+mod png;
 mod rle;
 
 use crate::error::ImageError;
@@ -15,7 +16,12 @@ pub fn read_image(image: &str) -> Result<(), ImageError> {
     }
     let buf = &buffer[..bytes_read];
     match infer::get(&buf).map(|t| t.mime_type()) {
-        Some("image/png") => Ok(()),
+        Some("image/png") => {
+            let mut buffer = Vec::new();
+            file.seek(SeekFrom::Start(8))?;
+            file.read_exact(&mut buffer)?;
+            Ok(())
+        }
         Some("image/jpeg") => Ok(()),
         Some("image/bmg") => {
             let mut buffer = Vec::new();
