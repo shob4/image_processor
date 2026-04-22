@@ -1,4 +1,7 @@
 use crate::error::ImageError;
+use crc::{CRC_32_ISO_HLDC, Crc};
+
+const PNG_CRC: Crc<u32> = Crc::<u32>::new(&CRC_32_ISO_HLDC);
 
 struct PngChunk {
     length: u32,
@@ -59,11 +62,33 @@ impl PngImageChunks {
         let header_id = u32::from_be_bytes(bytes[4..8].try_into()?);
         if header_id != 0x49484452 {
             return Err(ImageError::CustomError(
-                "first chunk was not the header chunk".to_string(),
+                "Png: first chunk was not the header chunk".to_string(),
             ));
         }
+
+        check_crc(bytes, header_length);
         let header = PngHeader::new(&bytes[8..8 + header_length as usize]);
         let mut chunks: Vec<PngChunk> = Vec::new();
         Ok(PngImageChunks { image: chunks })
     }
+}
+
+fn check_crc(bytes: &[u8], length: u32) -> Result<(), ImageError> {
+    let crc_data = &bytes[4..8 + length as usize];
+    let computed = PNG_CRC.checksum(crc_data);
+
+    let stored_crc_start = 8 + length as usize;
+    let stored = u32::from_be_bytes(
+        bytes[stored_crc_start..stored_crc_start + 4]
+            .try_into()
+            .map_err(|_| ImageError::CustomError("CRC slice error".to_string()))?,
+    );
+
+    if computed != stored {
+        return Err(ImageError::CustomError(format!(
+            "PNG header CRC mismatch: computed {:#010x}, stored {:#010x}",
+            computed, stored
+        )));
+    }
+    Ok(())
 }
