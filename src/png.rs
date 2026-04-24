@@ -12,10 +12,23 @@ struct PngChunk {
      */
     name: u32,
     data: Vec<u8>,
-    crc: u32,
 }
 
-pub struct PngHeader {
+impl PngChunk {
+    fn new(self, bytes: &[u8]) -> Result<(PngChunk, u64), ImageError> {
+        let length: u32 = u32::from_be_bytes(bytes[..4].try_into()?);
+        let new_chunk = PngChunk {
+            length: length,
+            name: u32::from_be_bytes(bytes[4..8].try_into()?),
+            data: bytes[8..8 + length as usize].to_vec(),
+        };
+        let bytes_read: u64 = 12 + length as u64;
+        check_crc(bytes, length)?;
+        Ok((new_chunk, bytes_read))
+    }
+}
+
+struct PngHeader {
     width: u32,
     height: u32,
     bit_depth: u8,
@@ -26,7 +39,7 @@ pub struct PngHeader {
 }
 
 impl PngHeader {
-    pub fn new(bytes: &[u8]) -> Result<PngHeader, ImageError> {
+    fn new(bytes: &[u8]) -> Result<PngHeader, ImageError> {
         Ok(PngHeader {
             width: u32::from_be_bytes(bytes[..4].try_into()?),
             height: u32::from_be_bytes(bytes[4..8].try_into()?),
@@ -69,6 +82,8 @@ impl PngImageChunks {
         check_crc(bytes, header_length);
         let header = PngHeader::new(&bytes[8..8 + header_length as usize]);
         let mut chunks: Vec<PngChunk> = Vec::new();
+        let mut i = 8 + header_length as usize;
+        while i < bytes.len() {}
         Ok(PngImageChunks { image: chunks })
     }
 }
