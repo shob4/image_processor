@@ -22,7 +22,6 @@ impl PngChunk {
             name: u32::from_be_bytes(bytes[4..8].try_into()?),
             data: bytes[8..8 + length as usize].to_vec(),
         };
-        let bytes_read: u32 = 12 + length;
         check_crc(bytes, length)?;
         Ok(new_chunk)
     }
@@ -70,7 +69,7 @@ pub struct PngImageChunks {
 }
 
 impl PngImageChunks {
-    pub fn new(bytes: &[u8]) -> Result<PngImageChunks, ImageError> {
+    pub fn new(bytes: &[u8]) -> Result<(PngImageChunks, PngHeader), ImageError> {
         let header_length = u32::from_be_bytes(bytes[..4].try_into()?);
         let header_id = u32::from_be_bytes(bytes[4..8].try_into()?);
         if header_id != 0x49484452 {
@@ -80,15 +79,15 @@ impl PngImageChunks {
         }
 
         check_crc(bytes, header_length);
-        let header = PngHeader::new(&bytes[8..8 + header_length as usize]);
+        let header = PngHeader::new(&bytes[8..8 + header_length as usize])?;
         let mut chunks: Vec<PngChunk> = Vec::new();
         let mut i = 8 + header_length as usize;
         while i < bytes.len() {
             let new_chunk = PngChunk::new(&bytes[i..])?;
-            i = new_chunk.length as usize + i;
+            i = new_chunk.length as usize + i + 4;
             chunks.push(new_chunk);
         }
-        Ok(PngImageChunks { image: chunks })
+        Ok((PngImageChunks { image: chunks }, header))
     }
 }
 
@@ -108,6 +107,17 @@ fn check_crc(bytes: &[u8], length: u32) -> Result<(), ImageError> {
             "PNG header CRC mismatch: computed {:#010x}, stored {:#010x}",
             computed, stored
         )));
+    }
+    Ok(())
+}
+
+// TODO figure out structure
+fn build_image(header: PngHeader, chunks: PngImageChunks) -> Result<(), ImageError> {
+    for chunk in chunks.image {
+        let chunk_name = chunk.name.to_string();
+        match chunk_name {
+            _ => todo!("figure out decoding and name parsing"),
+        }
     }
     Ok(())
 }
