@@ -1,7 +1,7 @@
 use crate::error::ImageError;
-use crc::{CRC_32_ISO_HLDC, Crc};
+use crc::{CRC_32_ISO_HDLC, Crc};
 
-const PNG_CRC: Crc<u32> = Crc::<u32>::new(&CRC_32_ISO_HLDC);
+const PNG_CRC: Crc<u32> = Crc::<u32>::new(&CRC_32_ISO_HDLC);
 
 struct PngChunk {
     length: u32,
@@ -15,16 +15,16 @@ struct PngChunk {
 }
 
 impl PngChunk {
-    fn new(self, bytes: &[u8]) -> Result<(PngChunk, u64), ImageError> {
+    fn new(bytes: &[u8]) -> Result<PngChunk, ImageError> {
         let length: u32 = u32::from_be_bytes(bytes[..4].try_into()?);
         let new_chunk = PngChunk {
             length: length,
             name: u32::from_be_bytes(bytes[4..8].try_into()?),
             data: bytes[8..8 + length as usize].to_vec(),
         };
-        let bytes_read: u64 = 12 + length as u64;
+        let bytes_read: u32 = 12 + length;
         check_crc(bytes, length)?;
-        Ok((new_chunk, bytes_read))
+        Ok(new_chunk)
     }
 }
 
@@ -83,7 +83,11 @@ impl PngImageChunks {
         let header = PngHeader::new(&bytes[8..8 + header_length as usize]);
         let mut chunks: Vec<PngChunk> = Vec::new();
         let mut i = 8 + header_length as usize;
-        while i < bytes.len() {}
+        while i < bytes.len() {
+            let new_chunk = PngChunk::new(&bytes[i..])?;
+            i = new_chunk.length as usize + i;
+            chunks.push(new_chunk);
+        }
         Ok(PngImageChunks { image: chunks })
     }
 }
