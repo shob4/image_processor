@@ -112,12 +112,60 @@ fn check_crc(bytes: &[u8], length: u32) -> Result<(), ImageError> {
 }
 
 // TODO figure out structure
+// bit_depth
+// color_type
+// compression_method
+// filter_method
+// interlace_method
+// need to read chunk name and data
 fn build_image(header: PngHeader, chunks: PngImageChunks) -> Result<(), ImageError> {
+    let mut palette_needed: bool = false;
+    match header.color_type {
+        0b000 => println!("no palette"),
+        0b010 => println!("rgb/truecolor"),
+        0b011 => {
+            println!("indexed, palette needed");
+            palette_needed = true;
+        }
+        0b100 => println!("grayscale + alpha: opacity for each pixel"),
+        0b110 => println!("rgb + alpha"),
+        _ => println!("invalid color type: {0}", header.color_type),
+    }
     for chunk in chunks.image {
         let chunk_name = chunk.name.to_string();
-        match chunk_name {
-            _ => todo!("figure out decoding and name parsing"),
+        match chunk_name.as_str() {
+            "PLTE" => {
+                palette_needed = false;
+                todo!("figure out color reading");
+            }
+            "IDAT" => {
+                todo!("reference palette");
+            }
+            "bKGD" => {
+                todo!("default background color");
+            }
+            "cHRM" => {
+                todo!("chromacity coordinates of display primaries and white point");
+            }
+            "cICP" => {
+                todo!("defines color space");
+            }
+            "hIST" => {
+                todo!("total amount of each color in image");
+            }
+            "tRNS" => {
+                todo!("contains transparency info")
+            }
+            _ => {
+                todo!("read data as normal");
+            }
         }
+    }
+    if palette_needed {
+        ImageError::CustomError(format!(
+            "color type {0} calls for PLTE, but none was found",
+            header.color_type
+        ));
     }
     Ok(())
 }
