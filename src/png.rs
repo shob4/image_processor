@@ -3,6 +3,16 @@ use crc::{CRC_32_ISO_HDLC, Crc};
 
 const PNG_CRC: Crc<u32> = Crc::<u32>::new(&CRC_32_ISO_HDLC);
 
+#[derive(Debug)]
+enum ColorType {
+    Grayscale,
+    Rgb,
+    Indexed(Vec<[u8; 3]>),
+    GrayscaleAlpha,
+    RgbAlpha,
+}
+
+#[derive(Debug)]
 struct PngChunk {
     length: u32,
     /*
@@ -27,6 +37,7 @@ impl PngChunk {
     }
 }
 
+#[derive(Debug)]
 struct PngHeader {
     width: u32,
     height: u32,
@@ -51,19 +62,8 @@ impl PngHeader {
     }
 }
 
-/*
-* necessary for color type 3 (indexed color), optional for 2 and 6 (truecolor, truecolor with alpha)
-* should not appear for 0 and 4 (grayscale, grayscale with alpha)
-*/
-pub struct PngPalette {
-    palette: Vec<(u8, u8, u8)>,
-}
-
-pub struct PngPaletteAlpha {
-    palette: Vec<(u8, u8, u8, u8)>,
-}
-
 // may be changed to hold data only, not entire chunks, may be split into different structs
+#[derive(Debug)]
 pub struct PngImageChunks {
     image: Vec<PngChunk>,
 }
@@ -119,25 +119,27 @@ fn check_crc(bytes: &[u8], length: u32) -> Result<(), ImageError> {
 // interlace_method
 // need to read chunk name and data
 fn build_image(header: PngHeader, chunks: PngImageChunks) -> Result<(), ImageError> {
-    let mut palette_needed: bool = false;
-    match header.color_type {
-        0b000 => println!("no palette"),
-        0b010 => println!("rgb/truecolor"),
+    let bit_depth = header.bit_depth as usize;
+    let color_type = match header.color_type {
+        0b000 => ColorType::Grayscale,
+        0b010 => ColorType::Rgb,
         0b011 => {
-            println!("indexed, palette needed");
-            palette_needed = true;
+            let palette: Vec<[u8; 3]> = Vec::new();
+            ColorType::Indexed(palette)
         }
-        0b100 => println!("grayscale + alpha: opacity for each pixel"),
-        0b110 => println!("rgb + alpha"),
-        _ => println!("invalid color type: {0}", header.color_type),
-    }
+        0b100 => ColorType::GrayscaleAlpha,
+        0b110 => ColorType::RgbAlpha,
+        _ => {
+            return Err(ImageError::CustomError(format!(
+                "invalid color type: {0}",
+                header.color_type
+            )));
+        }
+    };
     for chunk in chunks.image {
         let chunk_name = chunk.name.to_string();
         match chunk_name.as_str() {
-            "PLTE" => {
-                palette_needed = false;
-                todo!("figure out color reading");
-            }
+            "PLTE" => for i in (0..(chunk.length - bit_depth as u32)).step_by(bit_depth) {},
             "IDAT" => {
                 todo!("reference palette");
             }
@@ -160,12 +162,6 @@ fn build_image(header: PngHeader, chunks: PngImageChunks) -> Result<(), ImageErr
                 todo!("read data as normal");
             }
         }
-    }
-    if palette_needed {
-        ImageError::CustomError(format!(
-            "color type {0} calls for PLTE, but none was found",
-            header.color_type
-        ));
     }
     Ok(())
 }
