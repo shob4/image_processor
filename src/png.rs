@@ -119,31 +119,38 @@ fn check_crc(bytes: &[u8], length: u32) -> Result<(), ImageError> {
 // interlace_method
 // need to read chunk name and data
 fn build_image(header: PngHeader, chunks: PngImageChunks) -> Result<(), ImageError> {
-    let bit_depth = header.bit_depth as usize;
+    let palette_chunk = chunks.image.iter().find(|c| c.name.to_string() == "PLTE");
+    let idat_chunks: Vec<&PngChunk> = chunks
+        .image
+        .iter()
+        .filter(|c| c.name.to_string() == "IDAT")
+        .collect();
     let color_type = match header.color_type {
         0b000 => ColorType::Grayscale,
         0b010 => ColorType::Rgb,
         0b011 => {
-            let mut palette_chunk: Option<PngChunk> = None;
-            for chunk in &chunks.image {
-                let chunk_name = chunk.name.to_string();
-                match chunk_name.as_str() {
-                    "PLTE" => palette_chunk = Some(*chunk),
-                    _ => continue,
-                };
+            let chunk = palette_chunk
+                .ok_or_else(|| ImageError::CustomError("no palette found in png".to_string()))?;
+
+            if chunk.data.len() % 3 != 0 {
+                return Err(ImageError::CustomError(
+                    "invalid palette length: not divisible by 3".to_string(),
+                ));
             }
-            let palette: Vec<[u8; 3]> = match palette_chunk {
-                Some(chunk) => chunk
-                    .data
-                    .chunks_exact(3)
-                    .map(|rgb| [rgb[0], rgb[1], rgb[2]])
-                    .collect(),
-                None => {
-                    return Err(ImageError::CustomError(
-                        "no palette found in png".to_string(),
-                    ));
-                }
-            };
+            let entry_count = chunk.data.len() / 3;
+            if entry_count < 1 || entry_count > 256 {
+                return Err(ImageError::CustomError(format!(
+                    "invalid palette size: {}",
+                    entry_count
+                )));
+            }
+
+            let palette = chunk
+                .data
+                .chunks_exact(3)
+                .map(|rgb| [rgb[0], rgb[1], rgb[2]])
+                .collect();
+
             ColorType::Indexed(palette)
         }
         0b100 => ColorType::GrayscaleAlpha,
@@ -155,32 +162,30 @@ fn build_image(header: PngHeader, chunks: PngImageChunks) -> Result<(), ImageErr
             )));
         }
     };
-    for chunk in chunks.image {
-        let chunk_name = chunk.name.to_string();
-        match chunk_name.as_str() {
-            "PLTE" => for i in (0..(chunk.length - bit_depth as u32)).step_by(bit_depth) {},
-            "IDAT" => {
-                todo!("reference palette");
-            }
-            "bKGD" => {
-                todo!("default background color");
-            }
-            "cHRM" => {
-                todo!("chromacity coordinates of display primaries and white point");
-            }
-            "cICP" => {
-                todo!("defines color space");
-            }
-            "hIST" => {
-                todo!("total amount of each color in image");
-            }
-            "tRNS" => {
-                todo!("contains transparency info")
-            }
-            _ => {
-                todo!("read data as normal");
-            }
-        }
-    }
+    for chunk in idat_chunks {}
     Ok(())
 }
+// let chunk_name = chunk.name.to_string();
+// match chunk_name.as_str() {
+//     "IDAT" => {
+//         todo!("reference palette");
+//     }
+//     "bKGD" => {
+//         todo!("default background color");
+//     }
+//     "cHRM" => {
+//         todo!("chromacity coordinates of display primaries and white point");
+//     }
+//     "cICP" => {
+//         todo!("defines color space");
+//     }
+//     "hIST" => {
+//         todo!("total amount of each color in image");
+//     }
+//     "tRNS" => {
+//         todo!("contains transparency info")
+//     }
+//     _ => {
+//         todo!("read data as normal");
+//     }
+// }
