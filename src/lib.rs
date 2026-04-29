@@ -1,5 +1,6 @@
 mod bmp;
 mod error;
+mod pixels;
 mod png;
 mod rle;
 

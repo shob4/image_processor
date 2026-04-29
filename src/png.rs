@@ -1,18 +1,13 @@
 use crate::error::ImageError;
+use crate::pixels::Pixels;
 use crc::{CRC_32_ISO_HDLC, Crc};
 
 const PNG_CRC: Crc<u32> = Crc::<u32>::new(&CRC_32_ISO_HDLC);
 
-#[derive(Debug)]
-enum ColorType {
-    Grayscale,
-    Rgb,
-    Indexed(Vec<[u8; 3]>),
-    GrayscaleAlpha,
-    RgbAlpha,
-}
+const PLTE: u32 = u32::from_be_bytes(*b"PLTE");
+const IDAT: u32 = u32::from_be_bytes(*b"IDAT");
 
-#[derive(Debug, Copy)]
+#[derive(Debug)]
 struct PngChunk {
     length: u32,
     /*
@@ -119,15 +114,12 @@ fn check_crc(bytes: &[u8], length: u32) -> Result<(), ImageError> {
 // interlace_method
 // need to read chunk name and data
 fn build_image(header: PngHeader, chunks: PngImageChunks) -> Result<(), ImageError> {
-    let palette_chunk = chunks.image.iter().find(|c| c.name.to_string() == "PLTE");
-    let idat_chunks: Vec<&PngChunk> = chunks
-        .image
-        .iter()
-        .filter(|c| c.name.to_string() == "IDAT")
-        .collect();
-    let color_type = match header.color_type {
-        0b000 => ColorType::Grayscale,
-        0b010 => ColorType::Rgb,
+    let palette_chunk = chunks.image.iter().find(|c| c.name == PLTE);
+    let idat_chunks: Vec<&PngChunk> = chunks.image.iter().filter(|c| c.name == IDAT).collect();
+
+    let pixels: Vec<Pixels> = match header.color_type {
+        0b000 => read_pixels(idat_chunks, header.bit_depth, 1)?,
+        0b010 => read_pixels(idat_chunks, header.bit_depth, 3)?,
         0b011 => {
             let chunk = palette_chunk
                 .ok_or_else(|| ImageError::CustomError("no palette found in png".to_string()))?;
@@ -151,10 +143,10 @@ fn build_image(header: PngHeader, chunks: PngImageChunks) -> Result<(), ImageErr
                 .map(|rgb| [rgb[0], rgb[1], rgb[2]])
                 .collect();
 
-            ColorType::Indexed(palette)
+            read_pixels_with_palette(idat_chunks, palette, header.bit_depth, 1)?
         }
-        0b100 => ColorType::GrayscaleAlpha,
-        0b110 => ColorType::RgbAlpha,
+        0b100 => read_pixels(idat_chunks, header.bit_depth, 2)?,
+        0b110 => read_pixels(idat_chunks, header.bit_depth, 4)?,
         _ => {
             return Err(ImageError::CustomError(format!(
                 "invalid color type: {0}",
@@ -162,9 +154,29 @@ fn build_image(header: PngHeader, chunks: PngImageChunks) -> Result<(), ImageErr
             )));
         }
     };
-    for chunk in idat_chunks {}
     Ok(())
 }
+
+fn read_pixels(
+    image_data: Vec<&PngChunk>,
+    bit_depth: u8,
+    num_channels: u8,
+) -> Result<Vec<Pixels>, ImageError> {
+    let pixels: Vec<Pixels> = Vec::new();
+    for pixel in image_data {}
+    Ok(pixels)
+}
+
+fn read_pixels_with_palette(
+    image_data: Vec<&PngChunk>,
+    palette: Vec<[u8; 3]>,
+    bit_depth: u8,
+    num_channels: u8,
+) -> Result<Vec<Pixels>, ImageError> {
+    let pixels: Vec<Pixels> = Vec::new();
+    Ok(pixels)
+}
+
 // let chunk_name = chunk.name.to_string();
 // match chunk_name.as_str() {
 //     "IDAT" => {
