@@ -12,7 +12,7 @@ enum ColorType {
     RgbAlpha,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy)]
 struct PngChunk {
     length: u32,
     /*
@@ -124,7 +124,26 @@ fn build_image(header: PngHeader, chunks: PngImageChunks) -> Result<(), ImageErr
         0b000 => ColorType::Grayscale,
         0b010 => ColorType::Rgb,
         0b011 => {
-            let palette: Vec<[u8; 3]> = Vec::new();
+            let mut palette_chunk: Option<PngChunk> = None;
+            for chunk in &chunks.image {
+                let chunk_name = chunk.name.to_string();
+                match chunk_name.as_str() {
+                    "PLTE" => palette_chunk = Some(*chunk),
+                    _ => continue,
+                };
+            }
+            let palette: Vec<[u8; 3]> = match palette_chunk {
+                Some(chunk) => chunk
+                    .data
+                    .chunks_exact(3)
+                    .map(|rgb| [rgb[0], rgb[1], rgb[2]])
+                    .collect(),
+                None => {
+                    return Err(ImageError::CustomError(
+                        "no palette found in png".to_string(),
+                    ));
+                }
+            };
             ColorType::Indexed(palette)
         }
         0b100 => ColorType::GrayscaleAlpha,
