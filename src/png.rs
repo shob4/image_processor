@@ -1,10 +1,19 @@
 use crate::error::ImageError;
+use crate::pixels::Pixels;
 use crc::{CRC_32_ISO_HDLC, Crc};
 
 const PNG_CRC: Crc<u32> = Crc::<u32>::new(&CRC_32_ISO_HDLC);
 
 const PLTE: u32 = u32::from_be_bytes(*b"PLTE");
 const IDAT: u32 = u32::from_be_bytes(*b"IDAT");
+
+#[derive(Debug)]
+enum ColorType {
+    Grayscale,
+    Rgb,
+    GrayscaleAlpha,
+    RgbAlpha,
+}
 
 #[derive(Debug)]
 struct PngChunk {
@@ -117,8 +126,8 @@ fn build_image(header: PngHeader, chunks: PngImageChunks) -> Result<(), ImageErr
     let idat_chunks: Vec<&PngChunk> = chunks.image.iter().filter(|c| c.name == IDAT).collect();
 
     let pixels: Vec<[u8; 3]> = match header.color_type {
-        0b000 => read_pixels(idat_chunks, header.bit_depth, 1)?,
-        0b010 => read_pixels(idat_chunks, header.bit_depth, 3)?,
+        0b000 => read_pixels(idat_chunks, header.bit_depth, ColorType::Grayscale)?,
+        0b010 => read_pixels(idat_chunks, header.bit_depth, ColorType::Rgb)?,
         0b011 => {
             let chunk = palette_chunk
                 .ok_or_else(|| ImageError::CustomError("no palette found in png".to_string()))?;
@@ -144,8 +153,8 @@ fn build_image(header: PngHeader, chunks: PngImageChunks) -> Result<(), ImageErr
 
             read_pixels_with_palette(idat_chunks, palette, header.bit_depth)?
         }
-        0b100 => read_pixels(idat_chunks, header.bit_depth, 2)?,
-        0b110 => read_pixels(idat_chunks, header.bit_depth, 4)?,
+        0b100 => read_pixels(idat_chunks, header.bit_depth, ColorType::GrayscaleAlpha)?,
+        0b110 => read_pixels(idat_chunks, header.bit_depth, ColorType::RgbAlpha)?,
         _ => {
             return Err(ImageError::CustomError(format!(
                 "invalid color type: {0}",
@@ -159,11 +168,16 @@ fn build_image(header: PngHeader, chunks: PngImageChunks) -> Result<(), ImageErr
 fn read_pixels(
     image_data: Vec<&PngChunk>,
     bit_depth: u8,
-    num_channels: u8,
+    color_type: ColorType,
 ) -> Result<Vec<[u8; 3]>, ImageError> {
-    let pixels: Vec<[u8; 3]> = Vec::new();
-    for pixel in image_data {}
-    Ok(pixels)
+    let mut image: Vec<[u8; 3]> = Vec::new();
+
+    for chunk in image_data {
+        let colors: Vec<Pixels> = match (&bit_depth, &color_type) {
+            (16, ColorType::Grayscale) => chunk.data.chunks_exact(2).map(|p| Pixels::BigGray(u16::from_be_bytes([p[0], p[1]]))).collect(),
+        }
+    }
+    Ok(image)
 }
 
 fn read_pixels_with_palette(
