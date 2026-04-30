@@ -1,5 +1,4 @@
 use crate::error::ImageError;
-use crate::pixels::Pixels;
 use crc::{CRC_32_ISO_HDLC, Crc};
 
 const PNG_CRC: Crc<u32> = Crc::<u32>::new(&CRC_32_ISO_HDLC);
@@ -117,7 +116,7 @@ fn build_image(header: PngHeader, chunks: PngImageChunks) -> Result<(), ImageErr
     let palette_chunk = chunks.image.iter().find(|c| c.name == PLTE);
     let idat_chunks: Vec<&PngChunk> = chunks.image.iter().filter(|c| c.name == IDAT).collect();
 
-    let pixels: Vec<Pixels> = match header.color_type {
+    let pixels: Vec<[u8; 3]> = match header.color_type {
         0b000 => read_pixels(idat_chunks, header.bit_depth, 1)?,
         0b010 => read_pixels(idat_chunks, header.bit_depth, 3)?,
         0b011 => {
@@ -143,7 +142,7 @@ fn build_image(header: PngHeader, chunks: PngImageChunks) -> Result<(), ImageErr
                 .map(|rgb| [rgb[0], rgb[1], rgb[2]])
                 .collect();
 
-            read_pixels_with_palette(idat_chunks, palette, header.bit_depth, 1)?
+            read_pixels_with_palette(idat_chunks, palette, header.bit_depth)?
         }
         0b100 => read_pixels(idat_chunks, header.bit_depth, 2)?,
         0b110 => read_pixels(idat_chunks, header.bit_depth, 4)?,
@@ -161,8 +160,8 @@ fn read_pixels(
     image_data: Vec<&PngChunk>,
     bit_depth: u8,
     num_channels: u8,
-) -> Result<Vec<Pixels>, ImageError> {
-    let pixels: Vec<Pixels> = Vec::new();
+) -> Result<Vec<[u8; 3]>, ImageError> {
+    let pixels: Vec<[u8; 3]> = Vec::new();
     for pixel in image_data {}
     Ok(pixels)
 }
@@ -171,10 +170,38 @@ fn read_pixels_with_palette(
     image_data: Vec<&PngChunk>,
     palette: Vec<[u8; 3]>,
     bit_depth: u8,
-    num_channels: u8,
-) -> Result<Vec<Pixels>, ImageError> {
-    let pixels: Vec<Pixels> = Vec::new();
-    Ok(pixels)
+) -> Result<Vec<[u8; 3]>, ImageError> {
+    let mut image: Vec<[u8; 3]> = Vec::new();
+
+    for chunk in image_data {
+        let indices: Vec<u8> = match bit_depth {
+            8 => chunk.data.to_vec(),
+            4 => chunk
+                .data
+                .iter()
+                .flat_map(|&b| [b >> 4, b & 0x0F])
+                .collect(),
+            2 => chunk
+                .data
+                .iter()
+                .flat_map(|&b| [b >> 6, (b >> 4) & 0x03, (b >> 2) & 0x03, b & 0x03])
+                .collect(),
+            1 => chunk
+                .data
+                .iter()
+                .flat_map(|&b| (0..8).rev().map(move |i| (b >> i) & 1))
+                .collect(),
+            _ => {
+                return Err(ImageError::CustomError(format!(
+                    "invalid bit depth: {}",
+                    bit_depth
+                )));
+            }
+        };
+        let mut pixels: Vec<[u8; 3]> = indices.iter().map(|&i| palette[i as usize]).collect();
+        image.append(&mut pixels);
+    }
+    Ok(image)
 }
 
 // let chunk_name = chunk.name.to_string();
