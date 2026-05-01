@@ -174,15 +174,71 @@ fn read_pixels(
 
     for chunk in image_data {
         let colors: Vec<Pixels> = match (&bit_depth, &color_type) {
-            (16, ColorType::Grayscale) => chunk.data.chunks_exact(2).map(|p| Pixels::BigGray(u16::from_be_bytes([p[0], p[1]]))).collect(),
-            (16, ColorType::Rgb) => chunk.data.chunks_exact(6).map(|p| Pixels::BigRgb(u16::from_be_bytes([p[0], p[1]]), u16::from_be_bytes([p[2], p[3]]), u16::from_be_bytes([p[4], p[5]]))).collect(),
-            (16, ColorType::GrayscaleAlpha) => chunk.data.chunks_exact(2).map(|p| Pixels::BigGrayAlpha(u16::from_be_bytes([p[0], p[1]]), u16::from_be_bytes([p[2], p[3]]))).collect(),
-            (16, ColorType::RgbAlpha) => chunk.data.chunks_exact(8).map(|p| Pixels::BigRgba(u16::from_be_bytes([p[0], p[1]]), u16::from_be_bytes([p[2], p[3]]), u16::from_be_bytes([p[4], p[5]]), u16::from_be_bytes([p[6], p[7]]))).collect(),
+            (16, ColorType::Grayscale) => chunk
+                .data
+                .chunks_exact(2)
+                .map(|p| Pixels::BigGray(u16::from_be_bytes([p[0], p[1]])))
+                .collect(),
+            (16, ColorType::Rgb) => chunk
+                .data
+                .chunks_exact(6)
+                .map(|p| {
+                    Pixels::BigRgb(
+                        u16::from_be_bytes([p[0], p[1]]),
+                        u16::from_be_bytes([p[2], p[3]]),
+                        u16::from_be_bytes([p[4], p[5]]),
+                    )
+                })
+                .collect(),
+            (16, ColorType::GrayscaleAlpha) => chunk
+                .data
+                .chunks_exact(2)
+                .map(|p| {
+                    Pixels::BigGrayAlpha(
+                        u16::from_be_bytes([p[0], p[1]]),
+                        u16::from_be_bytes([p[2], p[3]]),
+                    )
+                })
+                .collect(),
+            (16, ColorType::RgbAlpha) => chunk
+                .data
+                .chunks_exact(8)
+                .map(|p| {
+                    Pixels::BigRgba(
+                        u16::from_be_bytes([p[0], p[1]]),
+                        u16::from_be_bytes([p[2], p[3]]),
+                        u16::from_be_bytes([p[4], p[5]]),
+                        u16::from_be_bytes([p[6], p[7]]),
+                    )
+                })
+                .collect(),
             (8, ColorType::Grayscale) => chunk.data.iter().map(|b| Pixels::Gray(*b)).collect(),
-            (8, ColorType::Rgb) => chunk.data.chunks_exact(3).map(|p| Pixels::Rgb(p[0], p[1], p[2])).collect(),
-            (8, ColorType::GrayscaleAlpha) => chunk.data.chunks_exact(2).map(|p| Pixels::GrayAlpha(p[0], p[1])).collect(),
-            (8, ColorType::RgbAlpha) => chunk.data.chunks_exact(4).map(|p| Pixels::Rgba(p[0], p[1], p[2], p[3])).collect(),
-        }
+            (8, ColorType::Rgb) => chunk
+                .data
+                .chunks_exact(3)
+                .map(|p| Pixels::Rgb(p[0], p[1], p[2]))
+                .collect(),
+            (8, ColorType::GrayscaleAlpha) => chunk
+                .data
+                .chunks_exact(2)
+                .map(|p| Pixels::GrayAlpha(p[0], p[1]))
+                .collect(),
+            (8, ColorType::RgbAlpha) => chunk
+                .data
+                .chunks_exact(4)
+                .map(|p| Pixels::Rgba(p[0], p[1], p[2], p[3]))
+                .collect(),
+            (4, ColorType::Grayscale) => chunk.data.iter().map(|b| Pixels::Gray(*b)).collect(),
+            (2, ColorType::Grayscale) => chunk.data.iter().map(|b| Pixels::Gray(*b)).collect(),
+            (1, ColorType::Grayscale) => chunk.data.iter().map(|b| Pixels::Gray(*b)).collect(),
+            (_, _) => {
+                return Err(ImageError::CustomError(format!(
+                    "invalid bit depth or color type: {0}, {1:?}",
+                    bit_depth, color_type
+                )));
+            }
+        };
+        image.append(colors);
     }
     Ok(image)
 }
