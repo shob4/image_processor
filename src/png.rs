@@ -64,7 +64,6 @@ impl PngHeader {
     }
 }
 
-// may be changed to hold data only, not entire chunks, may be split into different structs
 #[derive(Debug)]
 pub struct PngImageChunks {
     image: Vec<PngChunk>,
@@ -113,8 +112,7 @@ fn check_crc(bytes: &[u8], length: u32) -> Result<(), ImageError> {
     Ok(())
 }
 
-// TODO what do I do with them?
-fn build_image(header: PngHeader, chunks: PngImageChunks) -> Result<(), ImageError> {
+pub fn build_image(header: PngHeader, chunks: PngImageChunks) -> Result<Vec<[u16; 4]>, ImageError> {
     let palette_chunk = chunks.image.iter().find(|c| c.name == PLTE);
     let idat_chunks: Vec<&PngChunk> = chunks.image.iter().filter(|c| c.name == IDAT).collect();
 
@@ -155,7 +153,7 @@ fn build_image(header: PngHeader, chunks: PngImageChunks) -> Result<(), ImageErr
             )));
         }
     };
-    Ok(())
+    Ok(pixels)
 }
 
 fn read_pixels(

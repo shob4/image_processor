@@ -5,6 +5,7 @@ mod png;
 mod rle;
 
 use crate::error::ImageError;
+use crate::png::PngImageChunks;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 
@@ -21,6 +22,8 @@ pub fn read_image(image: &str) -> Result<(), ImageError> {
             let mut buffer = Vec::new();
             file.seek(SeekFrom::Start(8))?;
             file.read_exact(&mut buffer)?;
+            let (image_chunks, header) = PngImageChunks::new(&buffer)?;
+            let image = png::build_image(header, image_chunks)?;
             Ok(())
         }
         Some("image/jpeg") => Ok(()),
