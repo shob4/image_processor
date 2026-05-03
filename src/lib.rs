@@ -1,5 +1,6 @@
 mod bmp;
 mod error;
+mod jpeg;
 mod pixels;
 mod png;
 mod rle;
@@ -40,7 +41,9 @@ pub fn read_image(image: &str) -> Result<(), ImageError> {
             "unsupported file type: {0}",
             other
         ))),
-        None => Err(ImageError::CustomError("unsupported file type".to_string())),
+        None => Err(ImageError::CustomError(
+            "unsupported file type: unknown".to_string(),
+        )),
     }
 }
 
