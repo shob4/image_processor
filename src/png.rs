@@ -1,5 +1,4 @@
 use crate::error::ImageError;
-use crate::pixels::Pixels;
 use crc::{CRC_32_ISO_HDLC, Crc};
 
 const PNG_CRC: Crc<u32> = Crc::<u32>::new(&CRC_32_ISO_HDLC);
@@ -114,18 +113,12 @@ fn check_crc(bytes: &[u8], length: u32) -> Result<(), ImageError> {
     Ok(())
 }
 
-// TODO figure out structure
-// bit_depth
-// color_type
-// compression_method
-// filter_method
-// interlace_method
-// need to read chunk name and data
+// TODO what do I do with them?
 fn build_image(header: PngHeader, chunks: PngImageChunks) -> Result<(), ImageError> {
     let palette_chunk = chunks.image.iter().find(|c| c.name == PLTE);
     let idat_chunks: Vec<&PngChunk> = chunks.image.iter().filter(|c| c.name == IDAT).collect();
 
-    let pixels: Vec<[u8; 3]> = match header.color_type {
+    let pixels: Vec<[u16; 4]> = match header.color_type {
         0b000 => read_pixels(idat_chunks, header.bit_depth, ColorType::Grayscale)?,
         0b010 => read_pixels(idat_chunks, header.bit_depth, ColorType::Rgb)?,
         0b011 => {
@@ -297,8 +290,8 @@ fn read_pixels_with_palette(
     image_data: Vec<&PngChunk>,
     palette: Vec<[u8; 3]>,
     bit_depth: u8,
-) -> Result<Vec<[u8; 3]>, ImageError> {
-    let mut image: Vec<[u8; 3]> = Vec::new();
+) -> Result<Vec<[u16; 4]>, ImageError> {
+    let mut image: Vec<[u16; 4]> = Vec::new();
 
     for chunk in image_data {
         let indices: Vec<u8> = match bit_depth {
@@ -325,7 +318,13 @@ fn read_pixels_with_palette(
                 )));
             }
         };
-        let mut pixels: Vec<[u8; 3]> = indices.iter().map(|&i| palette[i as usize]).collect();
+        let mut pixels: Vec<[u16; 4]> = indices
+            .iter()
+            .map(|&i| {
+                let [r, g, b] = palette[i as usize];
+                [r as u16 * 257, g as u16 * 257, b as u16 * 257, u16::MAX]
+            })
+            .collect();
         image.append(&mut pixels);
     }
     Ok(image)
