@@ -112,7 +112,7 @@ fn check_crc(bytes: &[u8], length: u32) -> Result<(), ImageError> {
     Ok(())
 }
 
-pub fn build_image(header: PngHeader, chunks: PngImageChunks) -> Result<Vec<[u16; 4]>, ImageError> {
+pub fn build_png(header: PngHeader, chunks: PngImageChunks) -> Result<Vec<[u16; 4]>, ImageError> {
     let palette_chunk = chunks.image.iter().find(|c| c.name == PLTE);
     let idat_chunks: Vec<&PngChunk> = chunks.image.iter().filter(|c| c.name == IDAT).collect();
 

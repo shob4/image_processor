@@ -4,14 +4,20 @@ use crate::error::ImageError;
 struct JpegChunk {
     indicator: u8,
     length: u16,
-    data: Vec<u8>,
+    data: Option<Vec<u8>>,
 }
 
 impl JpegChunk {
     fn new(bytes: &[u8]) -> Result<JpegChunk, ImageError> {
         let indicator: u8 = bytes[1];
         let length = match indicator {
-            0xD0..=0xD9 => 0 as u16,
+            0xD0..=0xD9 => {
+                return Ok(JpegChunk {
+                    indicator: indicator,
+                    length: 0 as u16,
+                    data: None,
+                });
+            }
             0xC0 | 0xC2 | 0xC4 | 0xDB | 0xDA | 0xFE | 0xE0..=0xEF => {
                 u16::from_be_bytes(bytes[2..4].try_into()?)
             }
@@ -26,7 +32,7 @@ impl JpegChunk {
         Ok(JpegChunk {
             indicator: indicator,
             length: length,
-            data: bytes[4..2 + length as usize].to_vec(),
+            data: Some(bytes[4..2 + length as usize].to_vec()),
         })
     }
 }
@@ -37,7 +43,7 @@ struct JpegImageChunks {
 }
 
 impl JpegImageChunks {
-    fn new(bytes: &[u8]) -> Result<JpegImageChunks, ImageError> {
+    pub fn new(bytes: &[u8]) -> Result<JpegImageChunks, ImageError> {
         let mut chunks: Vec<JpegChunk> = Vec::new();
         let mut i: usize = 0;
         while i < bytes.len() {
@@ -51,4 +57,12 @@ impl JpegImageChunks {
         }
         Ok(JpegImageChunks { image: chunks })
     }
+}
+
+pub fn build_jpeg(chunks: JpegImageChunks) -> Result<Vec<[u16; 4]>, ImageError> {
+    let pixels: Vec<[u16; 4]> = Vec::new();
+    let frame_start1 = chunks.image.iter().find(|c| c.indicator == 0xC00);
+    let frame_start2 = chunks.image.iter().find(|c| c.indicator == 0xC02);
+
+    Ok(pixels)
 }

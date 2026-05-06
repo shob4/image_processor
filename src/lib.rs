@@ -24,7 +24,7 @@ pub fn read_image(image: &str) -> Result<(), ImageError> {
             file.seek(SeekFrom::Start(8))?;
             file.read_exact(&mut buffer)?;
             let (image_chunks, header) = PngImageChunks::new(&buffer)?;
-            let image = png::build_image(header, image_chunks)?;
+            let image = png::build_png(header, image_chunks)?;
             Ok(())
         }
         Some("image/jpeg") => Ok(()),
