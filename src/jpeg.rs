@@ -9,6 +9,12 @@ struct JpegChunk {
 
 impl JpegChunk {
     fn new(bytes: &[u8]) -> Result<JpegChunk, ImageError> {
+        if bytes.len() < 4 {
+            return Err(ImageError::CustomError(format!(
+                "invalid chunk length: {}",
+                bytes.len()
+            )));
+        }
         let indicator: u8 = bytes[1];
         let length = match indicator {
             0xD0..=0xD9 => {
@@ -53,6 +59,17 @@ impl JpegImageChunks {
             }
             let chunk = JpegChunk::new(&bytes[i..])?;
             i += 2 + chunk.length as usize;
+            if chunk.indicator == 0xDA {
+                while i < bytes.len() - 1 {
+                    if bytes[i] == 0xFF
+                        && bytes[i + 1] != 0x00
+                        && !(0xD0..=0xD7).contains(&bytes[i + 1])
+                    {
+                        break;
+                    }
+                    i += 1;
+                }
+            }
             chunks.push(chunk);
         }
         Ok(JpegImageChunks { image: chunks })
