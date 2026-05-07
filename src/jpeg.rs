@@ -24,10 +24,9 @@ impl JpegChunk {
                     data: None,
                 });
             }
-            0xC0 | 0xC2 | 0xC4 | 0xDB | 0xDA | 0xFE | 0xE0..=0xEF => {
+            0xC0 | 0xC2 | 0xC4 | 0xDB | 0xDD | 0xDA | 0xFE | 0xE0..=0xEF => {
                 u16::from_be_bytes(bytes[2..4].try_into()?)
             }
-            0xDD => 4 as u16,
             _ => {
                 return Err(ImageError::CustomError(format!(
                     "invalid indicator: {:#X}",
@@ -82,4 +81,11 @@ pub fn build_jpeg(chunks: JpegImageChunks) -> Result<Vec<[u16; 4]>, ImageError> 
     let frame_start2 = chunks.image.iter().find(|c| c.indicator == 0xC02);
 
     Ok(pixels)
+}
+
+fn ycrcb_to_rgb(y: f32, cr: f32, cb: f32) -> Result<[u16; 4], ImageError> {
+    let r = (y + 1.40200 * (cr - 128.0)).clamp(0.0, 255.0) as u16;
+    let g = (y - 0.34414 * (cb - 128.0) - 0.71414 * (cr - 128.0)).clamp(0.0, 255.0) as u16;
+    let b = (y + 1.77200 * (cb - 128.0)).clamp(0.0, 255.0) as u16;
+    Ok([r, g, b, u16::MAX])
 }
