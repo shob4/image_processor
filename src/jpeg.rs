@@ -1,6 +1,68 @@
 use crate::error::ImageError;
 
 #[derive(Debug)]
+struct Component {
+    id: u8,
+    sampling_factors: u8,
+    quantization_id: u8,
+}
+
+impl Component {
+    fn new(bytes: &[u8]) -> Component {
+        Component {
+            id: bytes[0],
+            sampling_factors: bytes[1],
+            quantization_id: bytes[2],
+        }
+    }
+
+    fn new_components(bytes: &[u8], count: u8) -> Result<Vec<Component>, ImageError> {
+        if bytes.len() / count as usize != 3 {
+            return Err(ImageError::CustomError(format!(
+                "{0} / {1} does not equal 3",
+                bytes.len(),
+                count
+            )));
+        }
+        let mut components: Vec<Component> = Vec::new();
+        for i in 0..count {
+            let new_component = Component::new(&bytes[(i * 3) as usize..(i * 3 + 3) as usize]);
+            components.push(new_component);
+        }
+        Ok(components)
+    }
+}
+
+#[derive(Debug)]
+struct JpegHeader {
+    precision: u8,
+    height: u16,
+    width: u16,
+    component_count: u8,
+    components: Vec<Component>,
+}
+
+impl JpegHeader {
+    fn new(chunk: JpegChunk) -> Result<JpegHeader, ImageError> {
+        let data = match chunk.data {
+            Some(data) => data,
+            None => {
+                return Err(ImageError::CustomError(
+                    "no data in jpeg header segment".to_string(),
+                ));
+            }
+        };
+        Ok(JpegHeader {
+            precision: data[0],
+            height: u16::from_be_bytes(data[1..2].try_into()?),
+            width: u16::from_be_bytes(data[2..4].try_into()?),
+            component_count: data[4],
+            components: Component::new_components(&data[5..], data[4])?,
+        })
+    }
+}
+
+#[derive(Debug)]
 struct JpegChunk {
     indicator: u8,
     length: u16,
