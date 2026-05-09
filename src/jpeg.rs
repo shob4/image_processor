@@ -63,6 +63,37 @@ impl JpegHeader {
 }
 
 #[derive(Debug)]
+struct QuantizationTable {
+    length: u16,
+    precision_table_id: u8,
+    table: [u16; 64],
+}
+
+impl QuantizationTable {
+    fn new(chunk: JpegChunk) -> Result<QuantizationTable, ImageError> {
+        let data = chunk.get_data()?;
+        if chunk.indicator != 0xDB {
+            return Err(ImageError::CustomError(format!(
+                "{:#X} is not the quantization table",
+                chunk.indicator
+            )));
+        }
+        let precision = data[2];
+        let mut table = [u16; 64];
+        match precision {
+            0 => 
+            1 =>
+            _ =>
+        }
+        Ok(QuantizationTable {
+            length: u16::from_be_bytes(data[0..2].try_into()?),
+            precision_table_id: precision,
+            table: (),
+        })
+    }
+}
+
+#[derive(Debug)]
 struct JpegChunk {
     indicator: u8,
     length: u16,
@@ -101,6 +132,16 @@ impl JpegChunk {
             length: length,
             data: Some(bytes[4..2 + length as usize].to_vec()),
         })
+    }
+
+    pub fn get_data(self) -> Result<Vec<u8>, ImageError> {
+        match self.data {
+            Some(data) => Ok(data),
+            None => Err(ImageError::CustomError(format!(
+                "{:#X} held no data",
+                self.indicator
+            ))),
+        }
     }
 }
 
