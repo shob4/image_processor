@@ -71,24 +71,50 @@ struct QuantizationTable {
 
 impl QuantizationTable {
     fn new(chunk: JpegChunk) -> Result<QuantizationTable, ImageError> {
-        let data = chunk.get_data()?;
         if chunk.indicator != 0xDB {
             return Err(ImageError::CustomError(format!(
                 "{:#X} is not the quantization table",
                 chunk.indicator
             )));
         }
+        let data = chunk.get_data()?;
         let precision = data[2];
-        let mut table = [u16; 64];
-        match precision {
-            0 => 
-            1 =>
-            _ =>
-        }
+        let table: [u16; 64] = match precision {
+            0 => {
+                if data[3..].len() <= 64 {
+                    return Err(ImageError::CustomError(
+                        "need at least 64 bytes of data".to_string(),
+                    ));
+                }
+                let mut arr = [0u16; 64];
+                for (i, &byte) in data[3..].iter().enumerate() {
+                    arr[i] = byte as u16;
+                }
+                arr
+            }
+            1 => {
+                if data[3..].len() <= 128 {
+                    return Err(ImageError::CustomError(
+                        "need at least 128 bytes of data".to_string(),
+                    ));
+                }
+                let mut arr = [0u16; 64];
+                for (i, chunk) in data[3..].chunks_exact(2).take(64).enumerate() {
+                    arr[i] = u16::from_be_bytes([chunk[0], chunk[1]]);
+                }
+                arr
+            }
+            _ => {
+                return Err(ImageError::CustomError(format!(
+                    "invalid quantization precision: {}",
+                    precision
+                )));
+            }
+        };
         Ok(QuantizationTable {
             length: u16::from_be_bytes(data[0..2].try_into()?),
             precision_table_id: precision,
-            table: (),
+            table: table,
         })
     }
 }
