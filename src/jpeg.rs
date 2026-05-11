@@ -78,16 +78,16 @@ impl QuantizationTable {
             )));
         }
         let data = chunk.get_data()?;
-        let precision = data[2];
+        let precision = data[0];
         let table: [u16; 64] = match precision {
             0 => {
-                if data[3..].len() <= 64 {
+                if data[1..].len() <= 64 {
                     return Err(ImageError::CustomError(
                         "need at least 64 bytes of data".to_string(),
                     ));
                 }
                 let mut arr = [0u16; 64];
-                for (i, &byte) in data[3..].iter().enumerate() {
+                for (i, &byte) in data[1..].iter().enumerate() {
                     arr[i] = byte as u16;
                 }
                 arr
@@ -99,7 +99,7 @@ impl QuantizationTable {
                     ));
                 }
                 let mut arr = [0u16; 64];
-                for (i, chunk) in data[3..].chunks_exact(2).take(64).enumerate() {
+                for (i, chunk) in data[1..].chunks_exact(2).take(64).enumerate() {
                     arr[i] = u16::from_be_bytes([chunk[0], chunk[1]]);
                 }
                 arr
@@ -115,6 +115,41 @@ impl QuantizationTable {
             length: u16::from_be_bytes(data[0..2].try_into()?),
             precision_table_id: precision,
             table: table,
+        })
+    }
+}
+
+#[derive(Debug)]
+struct HuffmanTable {
+    length: u16,
+    class: u8,
+    id: u8,
+    counts: [u8; 16],
+    values: Vec<u8>,
+}
+
+impl HuffmanTable {
+    fn new(chunk: JpegChunk) -> Result<HuffmanTable, ImageError> {
+        if chunk.indicator != 0xC4 {
+            return Err(ImageError::CustomError(format!(
+                "{:#X} is not the huffman table",
+                chunk.indicator
+            )));
+        }
+        let length = chunk.length;
+        let data = chunk.get_data()?;
+        let class_and_id = data[0];
+        let mut count = [0u8; 16];
+        for (i, byte) in data[0..16].iter().enumerate() {
+            count[i] = *byte;
+        }
+        let values: Vec<u8> = data[16..].iter().map(|&b| b).collect();
+        Ok(HuffmanTable {
+            length: length,
+            class: class_and_id >> 4,
+            id: class_and_id & 0x03,
+            counts: count,
+            values: values,
         })
     }
 }
