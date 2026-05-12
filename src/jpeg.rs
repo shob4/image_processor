@@ -121,11 +121,12 @@ impl QuantizationTable {
 
 #[derive(Debug)]
 struct HuffmanTable {
-    length: u16,
+    count: [u8; 16],
     class: u8,
     id: u8,
-    counts: [u8; 16],
-    values: Vec<u8>,
+    min_code: [i32; 16],
+    val_offset: [i32; 16],
+    symbols: Vec<u8>,
 }
 
 impl HuffmanTable {
@@ -139,18 +140,52 @@ impl HuffmanTable {
         let length = chunk.length;
         let data = chunk.get_data()?;
         let class_and_id = data[0];
+        let class = class_and_id >> 4;
+        let id = class_and_id & 0x0F;
         let mut count = [0u8; 16];
-        for (i, byte) in data[0..16].iter().enumerate() {
+        for (i, byte) in data[1..16].iter().enumerate() {
             count[i] = *byte;
         }
         let values: Vec<u8> = data[16..].iter().map(|&b| b).collect();
+
+        let mut min_code = [i32::MAX; 16];
+        let mut val_offset = [0i32; 16];
+
+        let mut code: i32 = 0;
+        let mut val_index: i32 = 0;
+
+        for i in 0..16 {
+            if count[i] > 0 {
+                min_code[i] = code;
+                val_offset[i] = val_index - code;
+            }
+            val_index += count[i] as i32;
+            code = (code + count[i] as i32) << 1;
+        }
+
         Ok(HuffmanTable {
-            length: length,
-            class: class_and_id >> 4,
-            id: class_and_id & 0x03,
-            counts: count,
-            values: values,
+            count: count,
+            class: class,
+            id: id,
+            min_code: min_code,
+            val_offset: val_offset,
+            symbols: symbols,
         })
+    }
+
+    fn decode_symbol(&self, bits: &mut BitReader) -> Result<u8, ImageError> {
+        let mut code: i32 = 0;
+        for i in 0..16 {
+            code = (code << 1) | bits.read_bit()? as i32;
+            if self.min_code[i] == i32::MAX {
+                continue;
+            }
+            if code >= self.min_code[i] && code < self.min_code[i] + self.count[i] as i32 {
+                let index = (self.val_offset[i] + code) as usize;
+                return Ok(self.symbols[index]);
+            }
+        }
+        Err(ImageError::CustomError("invalid huffman code".to_string()))
     }
 }
 
