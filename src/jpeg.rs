@@ -1,6 +1,39 @@
 use crate::error::ImageError;
 
 #[derive(Debug)]
+struct BitReader<'a> {
+    data: &'a [u8],
+    byte_pos: usize,
+    bit_pos: u8,
+}
+
+impl<'a> BitReader<'a> {
+    fn new(data: &'a [u8]) -> Self {
+        BitReader {
+            data,
+            byte_pos: 0,
+            bit_pos: 8,
+        }
+    }
+
+    fn read_bit(&mut self) -> Result<u8, ImageError> {
+        if self.bit_pos == 8 {
+            self.byte_pos += 1;
+            if self.data[self.byte_pos] == 0xFF {
+                if self.data[self.byte_pos + 1] != 0x00 {
+                    return Err(ImageError::CustomError("unexpected marker".to_string()));
+                }
+                self.byte_pos += 1;
+            }
+            self.bit_pos = 0;
+        }
+        let bit = (self.data[self.byte_pos] >> (7 - self.bit_pos)) & 1;
+        self.bit_pos += 1;
+        Ok(bit)
+    }
+}
+
+#[derive(Debug)]
 struct Component {
     id: u8,
     sampling_factors: u8,
