@@ -45,7 +45,7 @@ impl ScanComponent {
         ScanComponent {
             id: bytes[0],
             dc_table: bytes[1] >> 4,
-            ac_table: bytes[1] & 0xFF,
+            ac_table: bytes[1] & 0x0F,
         }
     }
 }
@@ -93,21 +93,13 @@ struct JpegHeader {
 }
 
 impl JpegHeader {
-    fn new(chunk: JpegChunk) -> Result<JpegHeader, ImageError> {
-        let data = match chunk.data {
-            Some(data) => data,
-            None => {
-                return Err(ImageError::CustomError(
-                    "no data in jpeg header segment".to_string(),
-                ));
-            }
-        };
+    fn new(data: &Vec<u8>) -> Result<JpegHeader, ImageError> {
         Ok(JpegHeader {
             precision: data[0],
-            height: u16::from_be_bytes(data[1..2].try_into()?),
-            width: u16::from_be_bytes(data[2..4].try_into()?),
-            component_count: data[4],
-            components: Component::new_components(&data[5..], data[4])?,
+            height: u16::from_be_bytes(data[1..3].try_into()?),
+            width: u16::from_be_bytes(data[3..5].try_into()?),
+            component_count: data[5],
+            components: Component::new_components(&data[6..], data[4])?,
         })
     }
 }
@@ -120,18 +112,17 @@ struct QuantizationTable {
 }
 
 impl QuantizationTable {
-    fn new(chunk: JpegChunk) -> Result<QuantizationTable, ImageError> {
-        if chunk.indicator != 0xDB {
+    fn new(data: &Vec<u8>, indicator: u8) -> Result<QuantizationTable, ImageError> {
+        if indicator != 0xDB {
             return Err(ImageError::CustomError(format!(
                 "{:#X} is not the quantization table",
-                chunk.indicator
+                indicator
             )));
         }
-        let data = chunk.get_data()?;
         let precision = data[0];
         let table: [u16; 64] = match precision {
             0 => {
-                if data[1..].len() <= 64 {
+                if data[1..].len() < 64 {
                     return Err(ImageError::CustomError(
                         "need at least 64 bytes of data".to_string(),
                     ));
@@ -143,7 +134,7 @@ impl QuantizationTable {
                 arr
             }
             1 => {
-                if data[3..].len() <= 128 {
+                if data[1..].len() < 128 {
                     return Err(ImageError::CustomError(
                         "need at least 128 bytes of data".to_string(),
                     ));
@@ -208,14 +199,13 @@ struct HuffmanTable {
 }
 
 impl HuffmanTable {
-    fn new(chunk: JpegChunk, scan_header: ScanHeader) -> Result<HuffmanTable, ImageError> {
+    fn new(chunk: JpegChunk) -> Result<HuffmanTable, ImageError> {
         if chunk.indicator != 0xC4 {
             return Err(ImageError::CustomError(format!(
                 "{:#X} is not the huffman table",
                 chunk.indicator
             )));
         }
-        let length = chunk.length;
         let data = chunk.get_data()?;
         let class_and_id = data[0];
         let class = class_and_id >> 4;
@@ -241,25 +231,13 @@ impl HuffmanTable {
             code = (code + count[i] as i32) << 1;
         }
 
-        code = 0;
-        let mut bits = BitReader::new(scan_header.data);
-        for i in 0..16 {
-            code = (code << 1) | bits.read_bit()? as i32;
-            if min_code[i] == i32::MAX {
-                continue;
-            }
-            if code >= min_code[i] && code < min_code[i] + count[i] as i32 {
-                let index = (val_offset[i] + code) as usize;
-            }
-        }
-
         Ok(HuffmanTable {
             count: count,
             class: class,
             id: id,
             min_code: min_code,
             val_offset: val_offset,
-            symbols: symbols,
+            symbols: values,
         })
     }
 
@@ -366,8 +344,58 @@ impl JpegImageChunks {
 
 pub fn build_jpeg(chunks: JpegImageChunks) -> Result<Vec<[u16; 4]>, ImageError> {
     let pixels: Vec<[u16; 4]> = Vec::new();
-    let frame_start1 = chunks.image.iter().find(|c| c.indicator == 0xC00);
-    let frame_start2 = chunks.image.iter().find(|c| c.indicator == 0xC02);
+    let frame_start1 = chunks.image.iter().find(|c| c.indicator == 0xC0);
+    let frame_start2 = chunks.image.iter().find(|c| c.indicator == 0xC2);
+
+    let jpeg_header = match (frame_start1, frame_start2) {
+        (Some(header), _) => {
+            let data = match &header.data {
+                Some(data) => data,
+                None => {
+                    return Err(ImageError::CustomError(
+                        "no data in header segment".to_string(),
+                    ));
+                }
+            };
+            JpegHeader::new(data)
+        }
+        (_, Some(header)) => {
+            let data = match &header.data {
+                Some(data) => data,
+                None => {
+                    return Err(ImageError::CustomError(
+                        "no data in header segment".to_string(),
+                    ));
+                }
+            };
+            JpegHeader::new(data)
+        }
+        (None, None) => {
+            return Err(ImageError::CustomError(
+                "unable to find header segment".to_string(),
+            ));
+        }
+    };
+
+    let quantization_segment = chunks.image.iter().find(|c| c.indicator == 0xDB);
+    let quantization_table = match quantization_segment {
+        Some(segment) => {
+            let data = match &segment.data {
+                Some(data) => data,
+                None => {
+                    return Err(ImageError::CustomError(
+                        "no data in quantization table".to_string(),
+                    ));
+                }
+            };
+            QuantizationTable::new(data, segment.indicator);
+        }
+        None => {
+            return Err(ImageError::CustomError(
+                "unable to find quantization table".to_string(),
+            ));
+        }
+    };
 
     Ok(pixels)
 }
