@@ -79,7 +79,7 @@ impl PngImageChunks {
             ));
         }
 
-        check_crc(bytes, header_length);
+        check_crc(bytes, header_length)?;
         let header = PngHeader::new(&bytes[8..8 + header_length as usize])?;
         let mut chunks: Vec<PngChunk> = Vec::new();
         let mut i = 8 + header_length as usize;

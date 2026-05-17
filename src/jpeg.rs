@@ -34,6 +34,23 @@ impl<'a> BitReader<'a> {
 }
 
 #[derive(Debug)]
+struct ScanComponent {
+    id: u8,
+    dc_table: u8,
+    ac_table: u8,
+}
+
+impl ScanComponent {
+    fn new(bytes: &[u8]) -> ScanComponent {
+        ScanComponent {
+            id: bytes[0],
+            dc_table: bytes[1] >> 4,
+            ac_table: bytes[1] & 0xFF,
+        }
+    }
+}
+
+#[derive(Debug)]
 struct Component {
     id: u8,
     sampling_factors: u8,
@@ -153,6 +170,34 @@ impl QuantizationTable {
 }
 
 #[derive(Debug)]
+struct ScanHeader {
+    length: u16,
+    component_count: u8,
+    components: Vec<ScanComponent>,
+    successive_approximation: u32,
+}
+
+impl ScanHeader {
+    fn new(bytes: &[u8]) -> ScanHeader {
+        let length = u16::from_be_bytes([bytes[0], bytes[1]]);
+        let component_count = bytes[2];
+        let components = bytes[3..length as usize - 2]
+            .chunks_exact(2)
+            .map(|c| ScanComponent::new(c))
+            .collect();
+        let successive_approximation = (bytes[length as usize - 2] as u32) << 16
+            | (bytes[length as usize - 1] as u32) << 8
+            | bytes[length as usize] as u32;
+        ScanHeader {
+            length: length,
+            component_count: component_count,
+            components: components,
+            successive_approximation: successive_approximation,
+        }
+    }
+}
+
+#[derive(Debug)]
 struct HuffmanTable {
     count: [u8; 16],
     class: u8,
@@ -163,7 +208,7 @@ struct HuffmanTable {
 }
 
 impl HuffmanTable {
-    fn new(chunk: JpegChunk) -> Result<HuffmanTable, ImageError> {
+    fn new(chunk: JpegChunk, scan_header: ScanHeader) -> Result<HuffmanTable, ImageError> {
         if chunk.indicator != 0xC4 {
             return Err(ImageError::CustomError(format!(
                 "{:#X} is not the huffman table",
@@ -194,6 +239,18 @@ impl HuffmanTable {
             }
             val_index += count[i] as i32;
             code = (code + count[i] as i32) << 1;
+        }
+
+        code = 0;
+        let mut bits = BitReader::new(scan_header.data);
+        for i in 0..16 {
+            code = (code << 1) | bits.read_bit()? as i32;
+            if min_code[i] == i32::MAX {
+                continue;
+            }
+            if code >= min_code[i] && code < min_code[i] + count[i] as i32 {
+                let index = (val_offset[i] + code) as usize;
+            }
         }
 
         Ok(HuffmanTable {
