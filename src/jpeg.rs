@@ -169,7 +169,13 @@ struct ScanHeader {
 }
 
 impl ScanHeader {
-    fn new(bytes: &[u8]) -> ScanHeader {
+    fn new(bytes: &[u8], indicator: u8) -> Result<ScanHeader, ImageError> {
+        if indicator != 0xDA {
+            return Err(ImageError::CustomError(format!(
+                "{:#X} is not the scan header",
+                indicator
+            )));
+        }
         let length = u16::from_be_bytes([bytes[0], bytes[1]]);
         let component_count = bytes[2];
         let components = bytes[3..length as usize - 2]
@@ -179,12 +185,12 @@ impl ScanHeader {
         let successive_approximation = (bytes[length as usize - 2] as u32) << 16
             | (bytes[length as usize - 1] as u32) << 8
             | bytes[length as usize] as u32;
-        ScanHeader {
+        Ok(ScanHeader {
             length: length,
             component_count: component_count,
             components: components,
             successive_approximation: successive_approximation,
-        }
+        })
     }
 }
 
@@ -199,14 +205,13 @@ struct HuffmanTable {
 }
 
 impl HuffmanTable {
-    fn new(chunk: JpegChunk) -> Result<HuffmanTable, ImageError> {
-        if chunk.indicator != 0xC4 {
+    fn new(data: &[u8], indicator: u8) -> Result<HuffmanTable, ImageError> {
+        if indicator != 0xC4 {
             return Err(ImageError::CustomError(format!(
                 "{:#X} is not the huffman table",
-                chunk.indicator
+                indicator
             )));
         }
-        let data = chunk.get_data()?;
         let class_and_id = data[0];
         let class = class_and_id >> 4;
         let id = class_and_id & 0x0F;
@@ -357,7 +362,7 @@ pub fn build_jpeg(chunks: JpegImageChunks) -> Result<Vec<[u16; 4]>, ImageError> 
                     ));
                 }
             };
-            JpegHeader::new(data)
+            JpegHeader::new(data)?
         }
         (_, Some(header)) => {
             let data = match &header.data {
@@ -368,7 +373,7 @@ pub fn build_jpeg(chunks: JpegImageChunks) -> Result<Vec<[u16; 4]>, ImageError> 
                     ));
                 }
             };
-            JpegHeader::new(data)
+            JpegHeader::new(data)?
         }
         (None, None) => {
             return Err(ImageError::CustomError(
@@ -388,11 +393,53 @@ pub fn build_jpeg(chunks: JpegImageChunks) -> Result<Vec<[u16; 4]>, ImageError> 
                     ));
                 }
             };
-            QuantizationTable::new(data, segment.indicator);
+            QuantizationTable::new(data, segment.indicator)?
         }
         None => {
             return Err(ImageError::CustomError(
                 "unable to find quantization table".to_string(),
+            ));
+        }
+    };
+
+    let huffman_segment = chunks.image.iter().find(|c| c.indicator == 0xC4);
+    let huffman_table = match huffman_segment {
+        Some(segment) => {
+            let data = match &segment.data {
+                Some(data) => data,
+                None => {
+                    return Err(ImageError::CustomError(
+                        "no data in huffman segment".to_string(),
+                    ));
+                }
+            };
+            HuffmanTable::new(data, segment.indicator)?
+        }
+        None => {
+            return Err(ImageError::CustomError(
+                "unable to find huffman table".to_string(),
+            ));
+        }
+    };
+    let mut bit_reader = BitReader::new(&huffman_table.symbols);
+    let symbols = huffman_table.decode_symbol(&mut bit_reader)?;
+
+    let scan_header_segment = chunks.image.iter().find(|c| c.indicator == 0xDA);
+    let scan_header = match scan_header_segment {
+        Some(segment) => {
+            let data = match &segment.data {
+                Some(data) => data,
+                None => {
+                    return Err(ImageError::CustomError(
+                        "no data in scan header segement".to_string(),
+                    ));
+                }
+            };
+            ScanHeader::new(data, segment.indicator)?
+        }
+        None => {
+            return Err(ImageError::CustomError(
+                "unable to find scan header".to_string(),
             ));
         }
     };
