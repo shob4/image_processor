@@ -317,11 +317,13 @@ impl JpegChunk {
 #[derive(Debug)]
 struct JpegImageChunks {
     image: Vec<JpegChunk>,
+    scan_data: Vec<u8>,
 }
 
 impl JpegImageChunks {
     pub fn new(bytes: &[u8]) -> Result<JpegImageChunks, ImageError> {
         let mut chunks: Vec<JpegChunk> = Vec::new();
+        let mut scan_data: Vec<u8> = Vec::new();
         let mut i: usize = 0;
         while i < bytes.len() {
             if bytes[i] != 0xFF {
@@ -330,6 +332,7 @@ impl JpegImageChunks {
             }
             let chunk = JpegChunk::new(&bytes[i..])?;
             i += 2 + chunk.length as usize;
+            let scan_start = i;
             if chunk.indicator == 0xDA {
                 while i < bytes.len() - 1 {
                     if bytes[i] == 0xFF
@@ -341,10 +344,21 @@ impl JpegImageChunks {
                     i += 1;
                 }
             }
+            scan_data.append(&mut bytes[scan_start..i].to_vec());
             chunks.push(chunk);
         }
-        Ok(JpegImageChunks { image: chunks })
+        Ok(JpegImageChunks {
+            image: chunks,
+            scan_data: scan_data,
+        })
     }
+}
+
+#[derive(Debug)]
+struct McuBlocks {
+    coefficients: [i32; 64],
+    dequantized: [i32; 64],
+    spatial: [i32; 64],
 }
 
 pub fn build_jpeg(chunks: JpegImageChunks) -> Result<Vec<[u16; 4]>, ImageError> {
@@ -382,47 +396,59 @@ pub fn build_jpeg(chunks: JpegImageChunks) -> Result<Vec<[u16; 4]>, ImageError> 
         }
     };
 
-    let quantization_segment = chunks.image.iter().find(|c| c.indicator == 0xDB);
-    let quantization_table = match quantization_segment {
-        Some(segment) => {
-            let data = match &segment.data {
-                Some(data) => data,
-                None => {
-                    return Err(ImageError::CustomError(
-                        "no data in quantization table".to_string(),
-                    ));
-                }
-            };
-            QuantizationTable::new(data, segment.indicator)?
-        }
-        None => {
-            return Err(ImageError::CustomError(
-                "unable to find quantization table".to_string(),
-            ));
-        }
-    };
+    let quantization_tables: Vec<QuantizationTable> = chunks
+        .image
+        .iter()
+        .filter(|c| c.indicator == 0xDB)
+        .map(|c| QuantizationTable::new(c.data.as_ref().unwrap(), c.indicator))
+        .collect::<Result<Vec<_>, _>>()?;
+    // let quantization_segment = chunks.image.iter().find(|c| c.indicator == 0xDB);
+    // let quantization_table = match quantization_segment {
+    //     Some(segment) => {
+    //         let data = match &segment.data {
+    //             Some(data) => data,
+    //             None => {
+    //                 return Err(ImageError::CustomError(
+    //                     "no data in quantization table".to_string(),
+    //                 ));
+    //             }
+    //         };
+    //         QuantizationTable::new(data, segment.indicator)?
+    //     }
+    //     None => {
+    //         return Err(ImageError::CustomError(
+    //             "unable to find quantization table".to_string(),
+    //         ));
+    //     }
+    // };
 
-    let huffman_segment = chunks.image.iter().find(|c| c.indicator == 0xC4);
-    let huffman_table = match huffman_segment {
-        Some(segment) => {
-            let data = match &segment.data {
-                Some(data) => data,
-                None => {
-                    return Err(ImageError::CustomError(
-                        "no data in huffman segment".to_string(),
-                    ));
-                }
-            };
-            HuffmanTable::new(data, segment.indicator)?
-        }
-        None => {
-            return Err(ImageError::CustomError(
-                "unable to find huffman table".to_string(),
-            ));
-        }
-    };
-    let mut bit_reader = BitReader::new(&huffman_table.symbols);
-    let symbols = huffman_table.decode_symbol(&mut bit_reader)?;
+    let huffman_tables: Vec<HuffmanTable> = chunks
+        .image
+        .iter()
+        .filter(|c| c.indicator == 0xC4)
+        .map(|c| HuffmanTable::new(c.data.as_ref().unwrap(), c.indicator))
+        .collect::<Result<Vec<_>, _>>()?;
+    // let huffman_segment = chunks.image.iter().find(|c| c.indicator == 0xC4);
+    // let huffman_table = match huffman_segment {
+    //     Some(segment) => {
+    //         let data = match &segment.data {
+    //             Some(data) => data,
+    //             None => {
+    //                 return Err(ImageError::CustomError(
+    //                     "no data in huffman segment".to_string(),
+    //                 ));
+    //             }
+    //         };
+    //         HuffmanTable::new(data, segment.indicator)?
+    //     }
+    //     None => {
+    //         return Err(ImageError::CustomError(
+    //             "unable to find huffman table".to_string(),
+    //         ));
+    //     }
+    // };
+    // let mut bit_reader = BitReader::new(&huffman_table.symbols);
+    // let symbols = huffman_table.decode_symbol(&mut bit_reader)?;
 
     let scan_header_segment = chunks.image.iter().find(|c| c.indicator == 0xDA);
     let scan_header = match scan_header_segment {
@@ -443,6 +469,8 @@ pub fn build_jpeg(chunks: JpegImageChunks) -> Result<Vec<[u16; 4]>, ImageError> 
             ));
         }
     };
+
+    for i in 0..scan_header.component_count {}
 
     Ok(pixels)
 }
